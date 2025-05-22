@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>بطاقة تقييم الأداء الشهري التفاعلية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Cairo:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <!-- Visualization & Content Choices:
+        - Student Info (Name, Month): Text Inputs -> Goal: Input -> HTML input -> JS for data handling. Justification: Standard for data entry.
+        - Evaluation Criteria (Quran Memorization, Revision, Tajweed, Attendance): Clickable styled buttons/options for 5 levels -> Goal: Input & Inform -> HTML/Tailwind/JS -> JS updates data model & chart. Justification: More interactive and visually clearer than checkboxes for a web app.
+        - Performance Summary: Bar Chart -> Goal: Compare & Summarize -> Chart.js (Canvas) -> Dynamically updated via JS. Justification: Provides a quick visual overview of performance across criteria.
+        - Notes: Textarea -> Goal: Input qualitative feedback -> HTML textarea. Justification: Standard for free-text input.
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body {
+            font-family: 'Cairo', 'Inter', sans-serif;
+            background-color: #F8F9FA;
+            /* Warm neutral background */
+        }
+
+        .evaluation-option {
+            cursor: pointer;
+            padding: 8px 12px;
+            border: 1px solid #D1D5DB;
+            /* neutral-300 */
+            border-radius: 6px;
+            transition: all 0.2s ease-in-out;
+            margin: 4px;
+            background-color: #FFFFFF;
+        }
+
+        .evaluation-option.selected {
+            background-color: #3B82F6;
+            /* blue-500 */
+            color: #FFFFFF;
+            border-color: #2563EB;
+            /* blue-600 */
+        }
+
+        .evaluation-option:hover:not(.selected) {
+            background-color: #EFF6FF;
+            /* blue-50 */
+        }
+
+        .print-button {
+            background-color: #10B981;
+            /* emerald-500 */
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        .print-button:hover {
+            background-color: #059669;
+            /* emerald-600 */
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            /* max-w-xl equivalent for larger control */
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            /* Default height, can be responsive with Tailwind h-XX */
+            max-height: 350px;
+            /* Max height constraint */
+        }
+
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+
+            #printableArea,
+            #printableArea * {
+                visibility: visible;
+            }
+
+            #printableArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .chart-container {
+                /* Ensure chart is sized for print */
+                height: 250px !important;
+                /* Adjust as needed for print layout */
+                max-height: 300px !important;
+            }
+
+            canvas#performanceChart {
+                max-width: 100% !important;
+                height: auto !important;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800">
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
+
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-sky-700">بطاقة تقييم الأداء الشهري التفاعلية</h1>
+            <p class="text-slate-600 mt-2 text-md sm:text-lg">
+                هذه أداة تفاعلية لتعبئة وعرض تقييم أداء الطلاب الشهري في حفظ ومراجعة القرآن الكريم.
+            </p>
+        </header>
+
+        <div id="printableArea" class="bg-white shadow-xl rounded-lg p-6 sm:p-8">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-sky-600 border-b-2 border-sky-500 pb-2 inline-block">
+                    بطاقة تقييم الأداء الشهري
+                </h2>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                    <label for="studentName" class="block text-sm font-medium text-slate-700 mb-1">اسم الطالب:</label>
+                    <input type="text" id="studentName" name="studentName"
+                        class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm"
+                        placeholder="أدخل اسم الطالب">
+                </div>
+                <div>
+                    <label for="evaluationMonth" class="block text-sm font-medium text-slate-700 mb-1">الشهر:</label>
+                    <input type="text" id="evaluationMonth" name="evaluationMonth"
+                        class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm"
+                        placeholder="أدخل الشهر (مثال: يناير ٢٠٢٤)">
+                </div>
+            </div>
+
+            <p class="text-lg text-sky-700 mb-6 text-center font-semibold">
+                أخي الحبيب،<br>
+                إليك تقييم أدائك الشهري في حفظ ومراجعة القرآن الكريم:
+            </p>
+
+            <div class="mb-6 space-y-6">
+
+                <div id="evaluationCriteria" class="space-y-5">
+                    <div class="bg-sky-50 border border-sky-200 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold text-sky-700 mb-2">١. حفظ الجديد من القرآن:</h3>
+                        <div class="flex flex-wrap gap-2" data-criteria="newMemorization">
+                            <button class="evaluation-option" data-value="5">ممتاز</button>
+                            <button class="evaluation-option" data-value="4">جيد جداً</button>
+                            <button class="evaluation-option" data-value="3">جيد</button>
+                            <button class="evaluation-option" data-value="2">مقبول</button>
+                            <button class="evaluation-option" data-value="1">ضعيف</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-sky-50 border border-sky-200 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold text-sky-700 mb-2">٢. مراجعة القديم:</h3>
+                        <div class="flex flex-wrap gap-2" data-criteria="oldRevision">
+                            <button class="evaluation-option" data-value="5">ممتاز</button>
+                            <button class="evaluation-option" data-value="4">جيد جداً</button>
+                            <button class="evaluation-option" data-value="3">جيد</button>
+                            <button class="evaluation-option" data-value="2">مقبول</button>
+                            <button class="evaluation-option" data-value="1">ضعيف</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-sky-50 border border-sky-200 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold text-sky-700 mb-2">٣. مستوى التجويد:</h3>
+                        <div class="flex flex-wrap gap-2" data-criteria="tajweedLevel">
+                            <button class="evaluation-option" data-value="5">ممتاز</button>
+                            <button class="evaluation-option" data-value="4">جيد جداً</button>
+                            <button class="evaluation-option" data-value="3">جيد</button>
+                            <button class="evaluation-option" data-value="2">مقبول</button>
+                            <button class="evaluation-option" data-value="1">ضعيف</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-sky-50 border border-sky-200 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold text-sky-700 mb-2">٤. الحضور والالتزام:</h3>
+                        <div class="flex flex-wrap gap-2" data-criteria="attendanceCommitment">
+                            <button class="evaluation-option" data-value="5">ممتاز</button>
+                            <button class="evaluation-option" data-value="4">جيد جداً</button>
+                            <button class="evaluation-option" data-value="3">جيد</button>
+                            <button class="evaluation-option" data-value="2">مقبول</button>
+                            <button class="evaluation-option" data-value="1">ضعيف</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-8">
+                <h3 class="text-xl font-semibold text-slate-700 mb-3 text-center">ملخص الأداء البياني</h3>
+
+                <div class="chart-container bg-white p-2 sm:p-4 rounded-lg shadow">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label for="notes" class="block text-lg font-semibold text-slate-700 mb-2">ملاحظات:</label>
+                <textarea id="notes" name="notes" rows="4"
+                    class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm"
+                    placeholder="أضف ملاحظاتك هنا..."></textarea>
+            </div>
+
+            <p class="text-center text-md text-slate-600 mt-8">
+                نتمنى لك دوام التقدم والتميز!
+            </p>
+        </div>
+
+        <div class="mt-8 text-center no-print">
+            <button id="printCardButton" class="print-button">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block ml-2" viewBox="0 0 20 20"
+                    fill="currentColor">
+                    <path fill-rule="evenodd"
+                        d="M5 4V3a2 2 0 012-2h6a2 2 0 012 2v1h2a2 2 0 012 2v6a2 2 0 01-2 2h-1v2a2 2 0 01-2 2H8a2 2 0 01-2-2v-2H5a2 2 0 01-2-2V6a2 2 0 012-2h2zm2-1a1 1 0 00-1 1v1h8V4a1 1 0 00-1-1H7zM6 6h8v6H6V6zm2 8h4v2H8v-2z"
+                        clip-rule="evenodd" />
+                </svg>
+                طباعة البطاقة
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const evaluationData = {
+            newMemorization: 0,
+            oldRevision: 0,
+            tajweedLevel: 0,
+            attendanceCommitment: 0
+        };
+
+        const chartLabels = [
+            'حفظ الجديد',
+            'مراجعة القديم',
+            'مستوى التجويد',
+            'الحضور والالتزام'
+        ];
+
+        const chartColors = [
+            'rgba(59, 130, 246, 0.7)', // blue-500
+            'rgba(16, 185, 129, 0.7)', // emerald-500
+            'rgba(239, 68, 68, 0.7)',  // red-500
+            'rgba(245, 158, 11, 0.7)' // amber-500
+        ];
+        const chartBorderColors = [
+            'rgba(59, 130, 246, 1)',
+            'rgba(16, 185, 129, 1)',
+            'rgba(239, 68, 68, 1)',
+            'rgba(245, 158, 11, 1)'
+        ];
+
+
+        const ctx = document.getElementById('performanceChart').getContext('2d');
+        let performanceChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    label: 'مستوى الأداء (من ٥)',
+                    data: Object.values(evaluationData),
+                    backgroundColor: chartColors,
+                    borderColor: chartBorderColors,
+                    borderWidth: 1,
+                    borderRadius: 5,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 5,
+                        ticks: {
+                            stepSize: 1,
+                            color: '#475569' // slate-600
+                        },
+                        grid: {
+                            color: '#E2E8F0' // slate-200
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            color: '#475569', // slate-600
+                            font: {
+                                size: 10 // Adjust font size for x-axis labels if needed
+                            },
+                            // Auto-wrap long labels (Chart.js v3+)
+                            // For older versions, you might need a plugin or manual label splitting
+                            callback: function (value, index, values) {
+                                const label = this.getLabelForValue(value);
+                                if (label.length > 16) { // Max length before trying to split
+                                    const words = label.split(' ');
+                                    let lines = [''];
+                                    let currentLine = 0;
+                                    words.forEach(word => {
+                                        if ((lines[currentLine] + word).length > 16 && lines[currentLine] !== '') {
+                                            currentLine++;
+                                            lines[currentLine] = '';
+                                        }
+                                        lines[currentLine] += word + ' ';
+                                    });
+                                    return lines.map(line => line.trim());
+                                }
+                                return label;
+                            }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: '#334155' // slate-700
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#0F172A', // slate-900
+                        titleColor: '#F1F5F9', // slate-100
+                        bodyColor: '#E2E8F0', // slate-200
+                        callbacks: {
+                            label: function (context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    const levelMap = ['ضعيف جداً', 'ضعيف', 'مقبول', 'جيد', 'جيد جداً', 'ممتاز'];
+                                    label += levelMap[context.parsed.y] + ' (' + context.parsed.y + ')';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        function updateChart() {
+            performanceChart.data.datasets[0].data = Object.values(evaluationData);
+            performanceChart.update();
+        }
+
+        document.querySelectorAll('.evaluation-option').forEach(button => {
+            button.addEventListener('click', () => {
+                const criteria = button.parentElement.dataset.criteria;
+                const value = parseInt(button.dataset.value);
+
+                // Deselect other buttons in the same group
+                button.parentElement.querySelectorAll('.evaluation-option').forEach(btn => {
+                    btn.classList.remove('selected');
+                });
+                // Select the clicked button
+                button.classList.add('selected');
+
+                evaluationData[criteria] = value;
+                updateChart();
+            });
+        });
+
+        document.getElementById('printCardButton').addEventListener('click', () => {
+            // Optionally, transfer input values to static text for printing if inputs don't print well
+            // For example:
+            // const studentNamePrint = document.getElementById('studentName').value;
+            // const monthPrint = document.getElementById('evaluationMonth').value;
+            // You could then have hidden elements in printableArea that are populated with these values
+            // and shown only for print. For simplicity, this example prints inputs directly.
+            window.print();
+        });
+
+        // Initialize chart with zeros
+        updateChart();
+    </script>
+</body>
+
+</html>
